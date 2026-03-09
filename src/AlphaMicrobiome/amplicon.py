@@ -1,7 +1,5 @@
-
-from typing import List, Tuple, Dict, Optional, Union
-
 from loguru import logger
+from typing import List, Tuple, Dict, Optional, Union
 
 from pathlib import Path
 
@@ -133,7 +131,7 @@ class Amplicon:
             otu_taxonomy_table_df: otu table merged with taxonomy table.
 
         Examples:
-        >>>otu_meta, otu_taxo = merge_otu_metadat_taxonomy_table(otu_table, metadata_table, taxonomy_table)
+        >>>otu_meta, otu_taxa = merge_otu_metadata_taxonomy_table(otu_table, metadata_table, taxonomy_table)
         '''
         
         # wide to long with columns: [OUT_ID, SampleID, Abundance]
@@ -374,7 +372,13 @@ class OTUQC:
     
     @staticmethod
     def keep_top_otus(otu_table_df: pd.DataFrame, top_k: int = 3000):
-        '''Keep top_k OTUs based on total abundance.'''
+        '''Keep top_k OTUs based on total abundance.
+        Args:
+            otu_table_df: OTU table DataFrame, OTU_ID as index, sample IDs as columns.
+            top_k: int, number of top OTUs to keep based on total abundance.
+        Returns:
+            filtered_otu_table_df: filtered OTU table DataFrame containing top_k OTUs.
+        '''
 
         total_abundance = otu_table_df.sum(axis=1)
         top = total_abundance.sort_values(ascending=False).head(top_k).index

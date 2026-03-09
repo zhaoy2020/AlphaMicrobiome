@@ -1,0 +1,18 @@
+[project]
+name = "AlphaMicrobiome"                                    # 项目的名称，必须是唯一的，通常使用小写字母和连字符（-）分隔单词。
+viersion = "0.1.0"                                          # 项目的版本号，遵循语义化版本控制（SemVer）规范，格式为 MAJOR.MINOR.PATCH。
+authors = [
+    {name = "Zhao Yu"}, 
+    {name = "Wang Zhenshuo"}
+]
+description = "Microbiome analysis pipeline and toolkit"    # 项目的简短描述，说明项目的主要功能和用途。
+readme = "README.md"                                        # 项目的 README 文件，通常包含项目的详细介绍、安装说明、使用指南等信息。
+
+[build-system]
+requires = ["setuptools", "wheel"]                          # 一个列表，列出构建项目时必须安装的 Python 包， 仅用于构建阶段，不会安装到最终环境中。
+build-backend = "setuptools.build_meta"                     # 指定构建后端，通常是 setuptools.build_meta，表示使用 setuptools 来构建项目;常见其他还有flit_core.buildapi, poetry.core.masonry.api, pdm.backend等
+
+[tool.setuptools.packages.find]
+where = ["src"]                                             # 指定要搜索包的目录，通常是 src 目录，这样可以将源代码与其他项目文件分开。
+include = ["AlphaMicrobiome"]
+exclude = ["AlphaMicrobiome.tests*"]                        # 指定要包含的包，通常是项目的主包名称，这样可以确保只有相关的代码被打包。

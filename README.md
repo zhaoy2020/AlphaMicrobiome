@@ -1,2 +1,3 @@
 # AlphaMicrobiome
-Microbiome analysis pipeline with Python
+
+Microbiome analysis pipeline and toolkit.

@@ -1,0 +1,30 @@
+# kernel for Jupyter notebooks
+ipykernel
+
+loguru
+tqdm
+
+# Scientific computing and visualization
+numpy
+pandas
+scipy
+statsmodels
+pingouin
+
+matplotlib
+seaborn
+statannotations
+
+# ML and DL
+scikit-learn
+shap
+torch
+torchvision
+
+# Microbiome analysis
+scikit-bio
+lefse
+networkx
+
+# Web
+reflex

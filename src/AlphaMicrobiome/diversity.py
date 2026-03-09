@@ -127,6 +127,45 @@ class AutoRarefaction:
         )
 
         return rarefaction_data_df
+
+    def visualization_rarefaction_curves_with_group(
+        self,
+        rarefaction_table_df: pd.DataFrame,
+        metadata_table: pd.DataFrame,
+        group_name: str,
+        alpha_metric_name: str = 'chao1',
+        ax: Optional[plt.Axes] = None,
+        show_legend: bool = True,
+    ) -> None:
+        rarefaction_table_with_group = (
+            rarefaction_table_df
+            .merge(
+                right=metadata_table[[group_name]],
+                left_on='SampleID',
+                right_index=True,
+                how='left'
+            )
+        )
+        sns.lineplot(
+            data=rarefaction_table_with_group,
+            x='Depth',
+            y=alpha_metric_name,
+            hue=group_name,
+            palette='husl',
+            estimator='mean',
+            errorbar='sd',
+            ax=ax,
+            legend=show_legend,
+        )
+        # plt.xscale('log')
+        ax.set_xlabel('Sampling Depth')
+        ax.set_ylabel(f'{alpha_metric_name.capitalize()} Diversity')
+        ax.set_title(f'Rarefaction Curves by {group_name}', fontsize='large')
+        if show_legend:
+            ax.legend()
+            # axs[0].legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+        
+        return None
     
     def choose_best_depth(self, all_rarefied_table_df: pd.DataFrame, alpha_metric_name: str, coverage_threshold: float = 0.9) -> int:
         '''Choose the best rarefaction depth based on coverage threshold.

@@ -1,4 +1,4 @@
-
+from loguru import logger
 from typing import List, Tuple, Dict, Optional, Union, Any
 
 import pandas as pd
@@ -45,12 +45,14 @@ class AutoDiffTest:
 
     def check_normality(self):
         """对每组进行正态性检验（Shapiro），返回结果表"""
+        logger.info(f'Start normality check.')
         res = pg.normality(self.data, dv=self.value_col, group=self.group_col)
         self.normality_results = res
         return res
 
     def check_homoscedasticity(self):
         """检验各组方差齐性（Levene）"""
+        logger.info(f'Start homoscedasticity check.')
         res = pg.homoscedasticity(self.data, dv=self.value_col, group=self.group_col)
         self.homo_results = res
         return res

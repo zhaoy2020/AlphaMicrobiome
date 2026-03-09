@@ -1,17 +1,17 @@
 
-from pathlib import Path 
 from loguru import logger
-from tqdm import tqdm 
-
 from typing import List, Dict, Tuple, Optional, Union
+from pathlib import Path 
+
 
 import numpy as np
 import pandas as pd 
 import matplotlib.pyplot as plt
 import seaborn as sns 
 
-import networkx as nx
 import random
+from tqdm import tqdm 
+import networkx as nx
 
 
 class NetworkBuilder:
@@ -21,8 +21,8 @@ class NetworkBuilder:
         - Batch processing from directory of files
         - Network saving in edge list format
     Examples:
-    >>>G_rhizo = MicrobiomeNetwork.build_network("rhizo_cor.tsv", "rhizo_pvalues.tsv", r_threshold=0.3, p_threshold=0.01)
-    >>>G_bulk = MicrobiomeNetwork.build_network("bulk_cor.tsv", "bulk_pvalues.tsv", r_threshold=0.3, p_threshold=0.01)
+    >>>G_rhizo = NetworkBuilder.build_network("rhizo_cor.tsv", "rhizo_pvalues.tsv", r_threshold=0.3, p_threshold=0.01)
+    >>>G_bulk = NetworkBuilder.build_network("bulk_cor.tsv", "bulk_pvalues.tsv", r_threshold=0.3, p_threshold=0.01)
     '''
 
     def build_network(self, cor_file: str, p_file: str,  r_threshold: float = 0.3, p_threshold: float = 0.01):
@@ -779,6 +779,7 @@ class NetworkMetrics:
         '''
 
         from sklearn.metrics import auc
+        
         results: Dict[str, List] = {
             'Taxa': [],
             'Group': [],
@@ -790,7 +791,7 @@ class NetworkMetrics:
             'Method': [],
         }
 
-        for name, G in tqdm(Gs.items(), desc=f"Random Attack AUC Calculation", position=0, leave=True):
+        for name, G in tqdm(Gs.items(), desc=f"{method} Attack AUC Calculation", position=0, leave=True):
             for repeat_record in tqdm(range(n_rep), desc=f"  Repeat of {name}", position=1, leave=False):
                 G_tmp = G.copy()
 
@@ -798,6 +799,7 @@ class NetworkMetrics:
                     # 随机打乱节点顺序
                     nodes = list(G_tmp.nodes())
                     random.shuffle(nodes) 
+
                 elif method == 'target':
                     # 加微小噪声打破 degree ties，并按照 degree 降序排列节点
                     deg = {
