@@ -10,7 +10,7 @@ from . import (
     plot,
 )
 
-__version__ = "0.0.1"
+__version__ = "0.1.1"
 __author__ = "ZhaoYu"
 __all__ = [
     'amplicon',
