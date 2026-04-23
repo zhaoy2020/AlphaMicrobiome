@@ -23,6 +23,9 @@ cd AlphaMicrobiome
 pip install -e .
 ```
 
+# Tutorial
+Detailed tutorials can be found in the notebooks.
+
 # Contributing
 We welcome contributions! Please follow these steps:
 1. Fork the repository and clone it locally.
