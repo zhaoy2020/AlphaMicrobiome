@@ -9,12 +9,40 @@ from typing import Literal
 
 class UsearchPipeline:
     '''Usearch pipeline for 16S rRNA amplicon data analysis.
-    Including quality control, merging paired-end reads, 
-    filtering low-quality reads, dereplication, removing singletons, 
+    USEARCH11 (https://www.drive5.com/usearch/manual/),
+    USEARCH12 (https://rcedgar.github.io/usearch12_documentation/cmds.html),
+    Including quality control, merging paired-end reads, filtering low-quality reads, dereplication, removing singletons, 
     preorder, clustering to OTUs, denoising to zOTUs, building OTU and zOTU feature tables.
     '''
 
-    def __init__(self, home_dir: str, threads: int | None = None):
+    def __init__(self, home_dir: str, threads: int | None = None, usearch_version: str = 'usearch11'):
+        '''Initialize the pipeline with home directory and number of threads.
+        Args:
+            home_dir: str, the home directory for the pipeline, which should contain a 'datas' directory with input files and will be used to store results in a 'results' directory.
+                |__ datas (Requires*)
+                |   |__ sample_1_1.fastq/fq
+                |   |__ sample_1_2.fastq/fq
+                |   |__ sample_2_1.fastq/fq
+                |   |__ sample_2_2.fastq/fq
+                |__ results (Optional, will be created if not exist)
+                |__ |__ 001_quality_control
+                |__ |__ 002_merge_paired_end_reads
+                |__ |__ 003_all_samples_merged
+                |__ |__ |__ all_samples.fastq
+                |__ |__ |__ all_samples_filtered.fastq
+                |__ |__ |__ all_samples_filtered_dereplicated.fasta
+                |__ |__ |__ all_samples_filtered_dereplicated_no_singleton.fasta
+                |__ |__ |__ all_samples_filtered_dereplicated_no_singleton_preorder.fasta
+                |__ |__ |__ all_samples_filtered_dereplicated_no_singleton_preorder_otus.fasta
+                |__ |__ |__ all_samples_filtered_dereplicated_no_singleton_preorder_zotus.fasta
+                |__ |__ |__ all_samples_filtered_dereplicated_no_singleton_preorder_otus_feature_table.txt
+                |__ |__ |__ all_samples_filtered_dereplicated_no_singleton_preorder_otus_feature_table_map.txt
+                |__ |__ |__ all_samples_filtered_dereplicated_no_singleton_preorder_zotus_feature_table.txt
+                |__ |__ |__ all_samples_filtered_dereplicated_no_singleton_preorder_zotus_feature_table_map.txt
+            threads: int, the number of threads to use for parallel processing, default is None which means using all available CPU cores.
+        '''
+
+        self.usearch_version: str = usearch_version
         self.home_dir: Path = Path(home_dir)
         self.data_dir: Path = self.home_dir.joinpath('datas')
         self.results_dir: Path = self.home_dir.joinpath('results')
@@ -37,8 +65,9 @@ class UsearchPipeline:
             if isinstance(cmd, list):
                 cmd = ' '.join(cmd) 
             run(cmd, shell=True, check=True, capture_output=not show, text=True)
-        except:
+        except Exception as e:
             logger.error(f"Command failed: {cmd}")
+            logger.error(f"Error: {e}")
 
     def show_files(self):
         logger.info(f'Data directory is set to: {self.data_dir}')
@@ -61,7 +90,7 @@ class UsearchPipeline:
             '''Generate command for merging paired-end reads.'''
             file_1, file_2 = tuple(f"{file_dir}/{file_name}{connect}{i}.{fastq_format}" for i in [1, 2])
             merge_file = output_dir.joinpath(f"{file_name}.fastq")
-            return f"usearch11 -fastq_mergepairs {file_1} -reverse {file_2} -fastqout {merge_file} -relabel @" ## @ 很重要
+            return f"{self.usearch_version} -fastq_mergepairs {file_1} -reverse {file_2} -fastqout {merge_file} -relabel @" ## @ 很重要
         
         logger.info('Merging paired-end reads...')
         merge_dir: Path = self.results_dir.joinpath('002_merge_paired_end_reads')
@@ -96,7 +125,7 @@ class UsearchPipeline:
         logger.info('Filtering low-quality reads step starting...')
         all_samples_file: Path = self.results_dir.joinpath('003_all_samples_merged/all_samples.fastq')
         all_samples_filtered: Path = self.results_dir.joinpath('003_all_samples_merged/all_samples_filtered.fastq')
-        filter_cmd = f'usearch11 -fastq_filter {all_samples_file} -fastaout {all_samples_filtered} -fastq_maxee 1.0 -relabel Filt -threads {self.threads}'
+        filter_cmd = f'{self.usearch_version} -fastq_filter {all_samples_file} -fastaout {all_samples_filtered} -fastq_maxee 1.0 -relabel Filt -threads {self.threads}'
         self.run_cmd(filter_cmd)        
         self.run_cmd(f'echo "Total reads after filtering:" && grep ">" {all_samples_filtered} | wc -l', show=True)
 
@@ -109,7 +138,7 @@ class UsearchPipeline:
         logger.info('Dereplication step starting...')
         all_samples_filtered: Path = self.results_dir.joinpath('003_all_samples_merged/all_samples_filtered.fastq')
         derep_fasta: Path = self.results_dir.joinpath('003_all_samples_merged/all_samples_filtered_dereplicated.fasta')
-        derep_cmd = f'usearch11 -fastx_uniques {all_samples_filtered} -fastaout {derep_fasta} -relabel Uniq -sizeout -threads {self.threads}'
+        derep_cmd = f'{self.usearch_version} -fastx_uniques {all_samples_filtered} -fastaout {derep_fasta} -relabel Uniq -sizeout -threads {self.threads}'
         self.run_cmd(derep_cmd)        
         self.run_cmd(f'echo "Total unique reads after dereplication:" && grep ">" {derep_fasta} | wc -l', show=True)
 
@@ -122,7 +151,7 @@ class UsearchPipeline:
         logger.info('Remove singletons step starting...')
         derep_fasta: Path = self.results_dir.joinpath('003_all_samples_merged/all_samples_filtered_dereplicated.fasta')
         no_singleton_fasta: Path = self.results_dir.joinpath('003_all_samples_merged/all_samples_filtered_dereplicated_no_singleton.fasta')
-        remove_cmd = f'usearch11 -sortbysize {derep_fasta} -fastaout {no_singleton_fasta} -minsize {minsize} '
+        remove_cmd = f'{self.usearch_version} -sortbysize {derep_fasta} -fastaout {no_singleton_fasta} -minsize {minsize} '
         self.run_cmd(remove_cmd)        
         self.run_cmd(f'echo "Total unique reads after removing singletons:" && grep ">" {no_singleton_fasta} | wc -l', show=True)
 
@@ -135,7 +164,7 @@ class UsearchPipeline:
         logger.info('Preorder step starting...')
         no_singleton_fasta: Path = self.results_dir.joinpath('003_all_samples_merged/all_samples_filtered_dereplicated_no_singleton.fasta')
         preorder_fasta: Path = self.results_dir.joinpath('003_all_samples_merged/all_samples_filtered_dereplicated_no_singleton_preorder.fasta')
-        preorder_cmd = f'usearch11 -sortbysize {no_singleton_fasta} -fastaout {preorder_fasta} -minsize {minsize}'
+        preorder_cmd = f'{self.usearch_version} -sortbysize {no_singleton_fasta} -fastaout {preorder_fasta} -minsize {minsize}'
         self.run_cmd(preorder_cmd)
         self.run_cmd(f'echo "Total OTUs after preorder:" && grep ">" {preorder_fasta} | wc -l', show=True)
 
@@ -150,7 +179,7 @@ class UsearchPipeline:
         otu_fasta: Path = self.results_dir.joinpath('003_all_samples_merged/all_samples_filtered_dereplicated_no_singleton_preorder_otus.fasta')
         otu_fasta_log: Path = self.results_dir.joinpath('003_all_samples_merged/all_samples_filtered_dereplicated_no_singleton_preorder_otus.log')
         if method == 'usearch':
-            cluster_cmd = f'usearch11 -cluster_otus {preorder_fasta} -otus {otu_fasta} -relabel Otu -threads {self.threads} > {otu_fasta_log}.{method} 2>&1'
+            cluster_cmd = f'{self.usearch_version} -cluster_otus {preorder_fasta} -otus {otu_fasta} -relabel Otu -threads {self.threads} > {otu_fasta_log}.{method} 2>&1'
         else:
             cluster_cmd = f'vsearch --cluster_size {preorder_fasta} --centroids {otu_fasta} --log {otu_fasta_log}.{method}'
         self.run_cmd(cluster_cmd)
@@ -167,7 +196,7 @@ class UsearchPipeline:
         denoised_fasta: Path = self.results_dir.joinpath('003_all_samples_merged/all_samples_filtered_dereplicated_no_singleton_preorder_zotus.fasta')
         denoised_fasta_log: Path = self.results_dir.joinpath('003_all_samples_merged/all_samples_filtered_dereplicated_no_singleton_preorder_zotus.log')
         if method == 'usearch':
-            denoise_cmd = f'usearch11 -unoise3 {no_singleton_fasta} -zotus {denoised_fasta} -threads {self.threads} > {denoised_fasta_log}.{method} 2>&1'
+            denoise_cmd = f'{self.usearch_version} -unoise3 {no_singleton_fasta} -zotus {denoised_fasta} -threads {self.threads} > {denoised_fasta_log}.{method} 2>&1'
         else:
             denoise_cmd = f'vsearch --cluster_size {no_singleton_fasta} --centroids {denoised_fasta} --log {denoised_fasta_log}.{method}'
         self.run_cmd(denoise_cmd)
@@ -185,7 +214,7 @@ class UsearchPipeline:
         feature_table: Path = self.results_dir.joinpath('003_all_samples_merged/all_samples_filtered_dereplicated_no_singleton_preorder_otus_feature_table.txt')
         feature_table_log: Path = self.results_dir.joinpath('003_all_samples_merged/all_samples_filtered_dereplicated_no_singleton_preorder_otus_feature_table.log')
         feature_table_map: Path = self.results_dir.joinpath('003_all_samples_merged/all_samples_filtered_dereplicated_no_singleton_preorder_otus_feature_table_map.txt')
-        build_cmd = f'usearch11 -otutab {all_samples} -otus {otu_fasta} -otutabout {feature_table} -mapout {feature_table_map} -threads {self.threads} > {feature_table_log} 2>&1'
+        build_cmd = f'{self.usearch_version} -otutab {all_samples} -otus {otu_fasta} -otutabout {feature_table} -mapout {feature_table_map} -threads {self.threads} > {feature_table_log} 2>&1'
         self.run_cmd(build_cmd)
         self.run_cmd(f'echo "First 10 lines of the feature table:" && head -n 10 {feature_table}', show=True)
 
@@ -201,41 +230,49 @@ class UsearchPipeline:
         zotu_feature_table: Path = self.results_dir.joinpath('003_all_samples_merged/all_samples_filtered_dereplicated_no_singleton_preorder_zotus_feature_table.txt')
         zotu_feature_table_log: Path = self.results_dir.joinpath('003_all_samples_merged/all_samples_filtered_dereplicated_no_singleton_preorder_zotus_feature_table.log')
         zotu_feature_table_map: Path = self.results_dir.joinpath('003_all_samples_merged/all_samples_filtered_dereplicated_no_singleton_preorder_zotus_feature_table_map.txt')
-        build_cmd = f'usearch11 -otutab {all_samples} -zotus {zotu_fasta} -otutabout {zotu_feature_table} -mapout {zotu_feature_table_map} -threads {self.threads} > {zotu_feature_table_log} 2>&1'
+        build_cmd = f'{self.usearch_version} -otutab {all_samples} -zotus {zotu_fasta} -otutabout {zotu_feature_table} -mapout {zotu_feature_table_map} -threads {self.threads} > {zotu_feature_table_log} 2>&1'
         self.run_cmd(build_cmd)
         self.run_cmd(f'echo "First 10 lines of the zOTU feature table:" && head -n 10 {zotu_feature_table}', show=True)
 
-    def run(self):
+    def run(self, connect: Literal['_', '.'] = '.', fastq_format: Literal['fastq', 'fq'] = 'fq'):
         '''One step to run all steps in the pipeline.
         Args:
-            None
+            connect: str, the character connecting paired-end read files, default is '_', can also be '.'
+            fastq_format: str, the format of the input fastq files, default is 'fq', can also be 'fastq'
+            method: str, the version of usearch to use, default is 'usearch12', can also be 'usearch11'
         Return:
             None
+
         Examples:
         >>> up = UsearchPipeline(home_dir='/path/to/home/dir')
         >>> up.run()
         '''
 
-        logger.info('Running the Usearch pipeline...')
+        logger.info(f'Running the Usearch pipeline with {self.usearch_version} ...')
+        
         self.show_files()
         self.quality_control()
-        self.merge_paired_end_reads(connect='.', fastq_format='fq')
+        self.merge_paired_end_reads(connect=connect, fastq_format=fastq_format)
         self.merge_all_samples()
         self.filter_low_quality_reads()
         self.dereplication()
-        self.remove_singletons(minsize=2)
-        self.preorder(minsize=8)
+
+        temp_usearch_version = self.usearch_version # Temporarily switch to usearch11 for removing singletons and preorder, which is faster than usearch12, then switch back to usearch12 for clustering and denoising, which is faster than usearch11
+        self.usearch_version = 'usearch11'          # Use usearch11 for removing singletons and preorder, which is faster than usearch12
+        self.remove_singletons(minsize=2)           # Deprecate in Usearch12 version
+        self.preorder(minsize=8)                    # Deprecate in Usearch12 version
+        self.usearch_version = temp_usearch_version # Restore usearch version for clustering and denoising, which is faster in usearch12 than usearch11
+
         # self.cluster_to_outs()
         self.denoise_to_zotus()
         # self.build_otu_feature_table()
         self.build_zotu_feature_table()
+
         logger.info('Pipeline execution completed.')
 
         return None 
 
 
 if __name__ == "__main__":
-    # Demo
     up = UsearchPipeline(home_dir='/bmp/backup/zhaosy/ws/china_16s_pipeline/results_demo')
     up.run()
-    # up.build_zotu_feature_table()
