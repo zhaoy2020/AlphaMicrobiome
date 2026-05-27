@@ -15,31 +15,32 @@ class UsearchPipeline:
     preorder, clustering to OTUs, denoising to zOTUs, building OTU and zOTU feature tables.
     '''
 
-    def __init__(self, home_dir: str, threads: int | None = None, usearch_version: str = 'usearch11'):
+    def __init__(self, home_dir: str, threads: int | None = None, db_file: str | None = None, usearch_version: str = 'usearch12'):
         '''Initialize the pipeline with home directory and number of threads.
         Args:
             home_dir: str, the home directory for the pipeline, which should contain a 'datas' directory with input files and will be used to store results in a 'results' directory.
                 |__ datas (Requires*)
-                |   |__ sample_1_1.fastq/fq
-                |   |__ sample_1_2.fastq/fq
-                |   |__ sample_2_1.fastq/fq
-                |   |__ sample_2_2.fastq/fq
+                    |__ sample_1_1.fastq/fq
+                    |__ sample_1_2.fastq/fq
+                    |__ sample_2_1.fastq/fq
+                    |__ sample_2_2.fastq/fq
                 |__ results (Optional, will be created if not exist)
-                |__ |__ 001_quality_control
-                |__ |__ 002_merge_paired_end_reads
-                |__ |__ 003_all_samples_merged
-                |__ |__ |__ all_samples.fastq
-                |__ |__ |__ all_samples_filtered.fastq
-                |__ |__ |__ all_samples_filtered_dereplicated.fasta
-                |__ |__ |__ all_samples_filtered_dereplicated_no_singleton.fasta
-                |__ |__ |__ all_samples_filtered_dereplicated_no_singleton_preorder.fasta
-                |__ |__ |__ all_samples_filtered_dereplicated_no_singleton_preorder_otus.fasta
-                |__ |__ |__ all_samples_filtered_dereplicated_no_singleton_preorder_zotus.fasta
-                |__ |__ |__ all_samples_filtered_dereplicated_no_singleton_preorder_otus_feature_table.txt
-                |__ |__ |__ all_samples_filtered_dereplicated_no_singleton_preorder_otus_feature_table_map.txt
-                |__ |__ |__ all_samples_filtered_dereplicated_no_singleton_preorder_zotus_feature_table.txt
-                |__ |__ |__ all_samples_filtered_dereplicated_no_singleton_preorder_zotus_feature_table_map.txt
+                    |__ 001_quality_control
+                    |__ 002_merge_paired_end_reads
+                    |__ 003_all_samples_merged
+                        |__ all_samples.fastq
+                        |__ all_samples_filtered.fastq
+                        |__ all_samples_filtered_dereplicated.fasta
+                        |__ all_samples_filtered_dereplicated_no_singleton.fasta
+                        |__ all_samples_filtered_dereplicated_no_singleton_preorder.fasta
+                        |__ all_samples_filtered_dereplicated_no_singleton_preorder_otus.fasta
+                        |__ all_samples_filtered_dereplicated_no_singleton_preorder_zotus.fasta
+                        |__ all_samples_filtered_dereplicated_no_singleton_preorder_otus_feature_table.txt
+                        |__ all_samples_filtered_dereplicated_no_singleton_preorder_otus_feature_table_map.txt
+                        |__ all_samples_filtered_dereplicated_no_singleton_preorder_zotus_feature_table.txt
+                        |__ all_samples_filtered_dereplicated_no_singleton_preorder_zotus_feature_table_map.txt
             threads: int, the number of threads to use for parallel processing, default is None which means using all available CPU cores.
+            db_file: str, the path to the database file for taxonomic classification.
         '''
 
         self.usearch_version: str = usearch_version
@@ -47,6 +48,7 @@ class UsearchPipeline:
         self.data_dir: Path = self.home_dir.joinpath('datas')
         self.results_dir: Path = self.home_dir.joinpath('results')
         self.threads: int = threads if threads is not None else os.cpu_count()
+        self.db_file: str | None = db_file
 
         logger.info(f'Home directory set to {home_dir}')
         if not self.results_dir.exists():
@@ -98,7 +100,7 @@ class UsearchPipeline:
         file_name_list = {file.stem.split(connect)[0] for file in self.data_dir.iterdir() if file.suffix in {'.fastq', '.fq'}}
         cmds = [get_cmds(self.data_dir, file_name, merge_dir, connect, fastq_format) for file_name in file_name_list]
         tasks = [delayed(self.run_cmd)(cmd) for cmd in cmds]
-        parallel = Parallel(verbose=50)
+        parallel = Parallel(n_jobs=self.threads, verbose=50)
         parallel(tasks)
 
     def merge_all_samples(self):
@@ -234,6 +236,29 @@ class UsearchPipeline:
         self.run_cmd(build_cmd)
         self.run_cmd(f'echo "First 10 lines of the zOTU feature table:" && head -n 10 {zotu_feature_table}', show=True)
 
+    def classification(self, db_file: str | None = None):
+        '''Classify OTUs or zOTUs using usearch.
+        Examples:
+        >>> usearch11 -sintax all_samples_filtered_dereplicated_no_singleton_preorder_otus.fasta -db . ./dbs/rdp_16s_v18_usearch.udb -tabbedout all_samples_filtered_dereplicated_no_singleton_preorder_otus_sintax.txt -strand both 
+        '''
+
+        if db_file is None or not Path(db_file).exists():
+            db_file = self.db_file if self.db_file is not None and Path(self.db_file).exists() else '../dbs/rdp_16s_v18_usearch.udb'
+        db_file = Path(db_file)
+        logger.info(f'Using database file for classification: {db_file}')
+
+        logger.info('Classification step starting...')
+        otu_fasta: Path = self.results_dir.joinpath('003_all_samples_merged/all_samples_filtered_dereplicated_no_singleton_preorder_otus.fasta')
+        zotu_fasta: Path = self.results_dir.joinpath('003_all_samples_merged/all_samples_filtered_dereplicated_no_singleton_preorder_zotus.fasta')
+        otu_sintax: Path = self.results_dir.joinpath('003_all_samples_merged/all_samples_filtered_dereplicated_no_singleton_preorder_otus_sintax.txt')
+        zotu_sintax: Path = self.results_dir.joinpath('003_all_samples_merged/all_samples_filtered_dereplicated_no_singleton_preorder_zotus_sintax.txt')
+        for file in [(otu_fasta, otu_sintax), (zotu_fasta, zotu_sintax)]:
+            if file[0].exists():
+                logger.info(f'Classifying {file[0].name} ...')
+                cmd = f'{self.usearch_version} -sintax {file[0]} -db {db_file} -tabbedout {file[1]} -strand both -threads {self.threads} > {file[1]}.log 2>&1'
+                self.run_cmd(cmd)
+
+
     def run(self, connect: Literal['_', '.'] = '.', fastq_format: Literal['fastq', 'fq'] = 'fq'):
         '''One step to run all steps in the pipeline.
         Args:
@@ -250,6 +275,7 @@ class UsearchPipeline:
 
         logger.info(f'Running the Usearch pipeline with {self.usearch_version} ...')
         
+        # Quality control.
         self.show_files()
         self.quality_control()
         self.merge_paired_end_reads(connect=connect, fastq_format=fastq_format)
@@ -257,16 +283,21 @@ class UsearchPipeline:
         self.filter_low_quality_reads()
         self.dereplication()
 
+        # Remove singletons and Preorder
         temp_usearch_version = self.usearch_version # Temporarily switch to usearch11 for removing singletons and preorder, which is faster than usearch12, then switch back to usearch12 for clustering and denoising, which is faster than usearch11
         self.usearch_version = 'usearch11'          # Use usearch11 for removing singletons and preorder, which is faster than usearch12
         self.remove_singletons(minsize=2)           # Deprecate in Usearch12 version
         self.preorder(minsize=8)                    # Deprecate in Usearch12 version
         self.usearch_version = temp_usearch_version # Restore usearch version for clustering and denoising, which is faster in usearch12 than usearch11
 
+        # Cluster or Denoise, then build feature table.
         # self.cluster_to_outs()
         self.denoise_to_zotus()
         # self.build_otu_feature_table()
         self.build_zotu_feature_table()
+
+        # Classify OTUs or zOTUs
+        self.classification()
 
         logger.info('Pipeline execution completed.')
 
@@ -274,5 +305,5 @@ class UsearchPipeline:
 
 
 if __name__ == "__main__":
-    up = UsearchPipeline(home_dir='/bmp/backup/zhaosy/ws/china_16s_pipeline/results_demo')
+    up = UsearchPipeline(home_dir='/bmp/backup/zhaosy/ws/china_16s_pipeline/results_demo', db_file='../dbs/rdp_16s_v18_usearch.udb')
     up.run()
