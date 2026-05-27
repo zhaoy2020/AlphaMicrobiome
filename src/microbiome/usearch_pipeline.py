@@ -88,20 +88,37 @@ class UsearchPipeline:
         >>> usearch11 -fastq_mergepairs sample_1.fastq -reverse sample_2.fastq -fastqout sample_merged.fastq -relabel @
         '''
         
-        def get_cmds(file_dir: Path, file_name:str, output_dir: Path, connect: Literal['_', '.'] = '_', fastq_format: Literal['fastq', 'fq'] = 'fastq') -> str:
+        def get_cmds(file_dir: Path, file_name:str, output_dir: Path, connect: Literal['_', '.'] = '_', fastq_format: Literal['fastq', 'fq'] = 'fastq') -> str | None:
             '''Generate command for merging paired-end reads.'''
             file_1, file_2 = tuple(f"{file_dir}/{file_name}{connect}{i}.{fastq_format}" for i in [1, 2])
             merge_file = output_dir.joinpath(f"{file_name}.fastq")
-            return f"{self.usearch_version} -fastq_mergepairs {file_1} -reverse {file_2} -fastqout {merge_file} -relabel @" ## @ 很重要
+
+            # If the forward and reverse files do not exist, skip merging for this sample.
+            if Path(file_1).exists() and Path(file_2).exists():
+                return f"{self.usearch_version} -fastq_mergepairs {file_1} -reverse {file_2} -fastqout {merge_file} -relabel @" ## @ 很重要
+            else:
+                return None 
         
         logger.info('Merging paired-end reads...')
         merge_dir: Path = self.results_dir.joinpath('002_merge_paired_end_reads')
         self.check_directories(merge_dir, f'Created merge directory at {merge_dir}')
-        file_name_list = {file.stem.split(connect)[0] for file in self.data_dir.iterdir() if file.suffix in {'.fastq', '.fq'}}
-        cmds = [get_cmds(self.data_dir, file_name, merge_dir, connect, fastq_format) for file_name in file_name_list]
+        file_name_list = {file.stem.split(connect)[0] for file in self.data_dir.iterdir() if file.suffix in {'.fastq', '.fq'}} # Get the unique sample names.
+        cmds, paired_nums, single_nums = [], 0, 0
+        for file_name in file_name_list:
+            cmd = get_cmds(self.data_dir, file_name, merge_dir, connect, fastq_format)
+            if cmd is not None:
+                cmds.append(cmd)                                                                                                # Paired-end files.
+                paired_nums += 1
+            else:
+                cp_cmd: str = f'cp {self.data_dir.joinpath(f"{file_name}*.{fastq_format}")} {merge_dir}'
+                cmds.append(cp_cmd)                                                                                             # Single-end files, just copy to the merge directory.
+                single_nums += 1
         tasks = [delayed(self.run_cmd)(cmd) for cmd in cmds]
         parallel = Parallel(n_jobs=self.threads, verbose=50)
         parallel(tasks)
+
+        if single_nums > 0:
+            logger.warning(f'Finished merging paired-end reads. Total paired samples: {paired_nums}, total single samples: {single_nums}.')
 
     def merge_all_samples(self):
         '''Merge all samples reads into one file.
@@ -114,7 +131,7 @@ class UsearchPipeline:
         merge_dir: Path = self.results_dir.joinpath('002_merge_paired_end_reads')
         all_samples_dir: Path = self.results_dir.joinpath('003_all_samples_merged')
         self.check_directories(all_samples_dir, f'Created directory for merged samples at {all_samples_dir}')
-        merge_cmd = f'cat {merge_dir}/*.fastq > {all_samples_dir.joinpath("all_samples.fastq")}'
+        merge_cmd = f'cat {merge_dir}/*q > {all_samples_dir.joinpath("all_samples.fastq")}'                             # fastq or fq.
         self.run_cmd(merge_cmd)
         self.run_cmd(f'echo "Total reads in all samples:" && grep @ {all_samples_dir.joinpath("all_samples.fastq")} | wc -l', show=True)
 
