@@ -1,6 +1,7 @@
 # AlphaMicrobiome
 
 AlphaMicrobiome is a Python‑based toolkit for microbiome data analysis, designed to deliver efficient analytical solutions. It integrates a variety of microbiome analysis algorithms and supports end‑to‑end analysis workflows, ranging from raw data preprocessing to advanced statistical analysis.
+
 ---
 
 # Features
@@ -17,10 +18,16 @@ AlphaMicrobiome is a Python‑based toolkit for microbiome data analysis, design
 
 # Installation
 
+Download and install from GitHub:
 ```bash
 git clone https://github.com/zhaoy2020/AlphaMicrobiome.git
 cd AlphaMicrobiome
 pip install -e .
+```
+
+Install directly from PyPi:
+```bash
+pip install AlphaMicrobiome
 ```
 
 # Tutorial
