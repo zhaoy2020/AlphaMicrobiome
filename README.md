@@ -1,3 +1,12 @@
+<div align="center">
+
+![visitors](https://visitor-badge.laobi.icu/badge?page_id=zhaoy2020/AlphaMicrobiome)
+[![GitHub Repo stars](https://img.shields.io/github/stars/zhaoy2020/AlphaMicrobiome?style=social)](https://github.com/zhaoy2020/AlphaMicrobiome/stargazers)
+[![GitHub Code License](https://img.shields.io/github/license/zhaoy2020/AlphaMicrobiome)](LICENSE)
+[![GitHub pull request](https://img.shields.io/badge/PRs-welcome-blue)](https://github.com/zhaoy2020/AlphaMicrobiome/pulls)
+
+</div>
+
 # AlphaMicrobiome
 
 AlphaMicrobiome is a Python‑based toolkit for microbiome data analysis, designed to deliver efficient analytical solutions. It integrates a variety of microbiome analysis algorithms and supports end‑to‑end analysis workflows, ranging from raw data preprocessing to advanced statistical analysis.
