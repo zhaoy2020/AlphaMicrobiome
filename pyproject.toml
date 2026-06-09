@@ -1,6 +1,6 @@
 [project]
 name = "AlphaMicrobiome"                                    # 项目的名称，必须是唯一的，通常使用小写字母和连字符（-）分隔单词。
-viersion = "0.1.0"                                          # 项目的版本号，遵循语义化版本控制（SemVer）规范，格式为 MAJOR.MINOR.PATCH。
+version = "0.1.2"                                          # 项目的版本号，遵循语义化版本控制（SemVer）规范，格式为 MAJOR.MINOR.PATCH。
 authors = [
     {name = "Zhao Yu"}, 
     {name = "Wang Zhenshuo"}
@@ -14,5 +14,3 @@ build-backend = "setuptools.build_meta"                     # 指定构建后端
 
 [tool.setuptools.packages.find]
 where = ["src"]                                             # 指定要搜索包的目录，通常是 src 目录，这样可以将源代码与其他项目文件分开。
-include = ["AlphaMicrobiome"]
-exclude = ["AlphaMicrobiome.tests*"]                        # 指定要包含的包，通常是项目的主包名称，这样可以确保只有相关的代码被打包。
