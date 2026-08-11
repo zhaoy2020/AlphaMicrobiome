@@ -169,3 +169,112 @@ class PERMANOVA:
     def __init__(self, otu_table: pd.DataFrame, metadata_table: pd.DataFrame):
         pass
 
+
+class AddLetter:
+    def get_p_value(self, group1: str, group2: str, diff_matrix: pd.DataFrame):
+        return diff_matrix.loc[group1, group2]
+
+    def show_letter(self, df: pd.DataFrame, group: str, metric: str = 'shannon'):
+
+        # =========================
+        # Step 1: Kruskal-Wallis
+        # =========================
+        dif_df = pg.kruskal(data=df, dv=metric, between=group)
+
+        if dif_df['p-unc'].values[0] < 0.05:
+
+            # =========================
+            # Step 2: pairwise comparisons
+            # =========================
+            pairwise_df = pg.pairwise_tests(
+                data=df,
+                dv=metric,
+                between=group,
+                parametric=False,
+                padjust='fdr_bh'
+            )
+
+            # =========================
+            # Step 3: 排序（从大到小）
+            # =========================
+            mean_df = df.groupby(by=group)[metric].mean().reset_index()
+            mean_df = mean_df.sort_values(by=metric, ascending=False).reset_index(drop=True)
+            cats = mean_df[group].tolist()
+
+            # =========================
+            # Step 4: 构建p值矩阵
+            # =========================
+            diff_matrix = pd.DataFrame(np.nan, index=cats, columns=cats)
+
+            for _, row in pairwise_df.iterrows():
+                g1, g2 = row['A'], row['B']
+                pval = row['p-corr']  # ✅ 用校正后的p值
+                diff_matrix.loc[g1, g2] = pval
+                diff_matrix.loc[g2, g1] = pval
+
+            # =========================
+            # Step 5: 初始化
+            # =========================
+            letters = [chr(ord('a') + i) for i in range(26)]
+            cat_letter_dict = {cat: "" for cat in cats}
+
+            letter_idx = 0
+
+            # =========================
+            # Step 6: 主循环（逐组处理）
+            # =========================
+            for i, base_cat in enumerate(cats):
+
+                # 如果还没标记 → 给当前字母
+                if cat_letter_dict[base_cat] == "":
+                    cat_letter_dict[base_cat] += letters[letter_idx]
+
+                current_letter = letters[letter_idx]
+
+                # =========================
+                # 向下比较
+                # =========================
+                for j in range(i + 1, len(cats)):
+                    down_cat = cats[j]
+
+                    pval = self.get_p_value(base_cat, down_cat, diff_matrix)
+
+                    if pd.isna(pval) or pval >= 0.05:
+                        # 不显著 → 共享字母
+                        if current_letter not in cat_letter_dict[down_cat]:
+                            cat_letter_dict[down_cat] += current_letter
+                    else:
+                        # 显著 → 新字母
+                        letter_idx += 1
+                        new_letter = letters[letter_idx]
+
+                        if new_letter not in cat_letter_dict[down_cat]:
+                            cat_letter_dict[down_cat] += new_letter
+
+                        # =========================
+                        # 向上回溯（关键修复）
+                        # =========================
+                        for k in range(0, j):
+                            up_cat = cats[k]
+                            pval_up = self.get_p_value(down_cat, up_cat, diff_matrix)
+
+                            # 不显著 → 应该共享新字母
+                            if pd.isna(pval_up) or pval_up >= 0.05:
+                                if new_letter not in cat_letter_dict[up_cat]:
+                                    cat_letter_dict[up_cat] += new_letter
+
+                        break  # 必须跳出当前向下循环
+
+            # =========================
+            # Step 7: 清理字母（排序去重）
+            # =========================
+            for cat in cat_letter_dict:
+                cat_letter_dict[cat] = ''.join(sorted(set(cat_letter_dict[cat])))
+
+            return diff_matrix, cat_letter_dict
+
+        else:
+            print(f"No significant differences among groups for {metric} "
+                f"(p={dif_df['p-unc'].values[0]:.2e})")
+            
+            return None, None

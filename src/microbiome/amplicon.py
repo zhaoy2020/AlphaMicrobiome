@@ -262,12 +262,15 @@ class OTUQC:
             iqr = q3 - q1
             min_threshold = q1 - iqr_scale_factor * iqr
             max_threshold = q3 + iqr_scale_factor * iqr
+
         elif method == 'quantile':
             min_threshold = total_abundance.quantile(q=min_quantile)
             max_threshold = total_abundance.quantile(q=max_quantile)
+
         elif method == 'abundance':
             min_threshold = min_quantile
             max_threshold = max_quantile
+            
         else:
             raise ValueError(f"Filtering method '{method}' is not supported. Choose from 'iqr' or 'quantile'.")
 
@@ -404,33 +407,6 @@ class OTUQC:
         return filtered_otu_table
 
     @staticmethod
-    def sparsity_curve(otu_table_df: pd.DataFrame, steps=[1000, 2000, 5000, 10000, 20000]):
-        '''Plot sparsity curve based on different number of OTUs.'''
-
-        sparsities = []
-
-        for k in steps:
-            if k >= otu_table_df.shape[0]: # number of OTUs
-                sparsities.append(np.nan)
-                continue 
-
-            subset = otu_table_df.iloc[:k, :]
-            # Spearman correlation justfor sparsity test
-            corr = subset.T.corr(method='spearman')
-            sparsity = (corr == 0).mean().mean()
-            sparsities.append(sparsity)
-
-            print(f"{k} OTUs -> Sparsity: {sparsity:.4f}")
-
-        plt.plot(steps[:len(sparsities)], sparsities, marker='o')
-        plt.xlabel('OTU numbers')
-        plt.ylabel('Sparsity')
-        plt.title('Sparsity Curve')
-        plt.grid(True)
-
-        return sparsities
-    
-    @staticmethod
     def normalize(otu_table_df: pd.DataFrame, method: str = 'rel') -> pd.DataFrame:
         '''Normalize OTU table with specified method.
         Args:
@@ -447,7 +423,6 @@ class OTUQC:
             normalized_otu_table_df = otu_table_df.copy()
 
         elif method == 'rel':
-            # normalized_otu_table_df = otu_table_df.div(otu_table_df.sum(axis=0), axis=1)
             sums = otu_table_df.sum(axis=0).replace(0, np.nan) # avoid division by zero
             normalized_otu_table_df = otu_table_df.div(sums, axis=1).fillna(0)
 
@@ -493,27 +468,6 @@ class OTUQC:
 
         return normalized_otu_table_df
     
-    def _choose_rarefaction_depth(self, strategy: str, q: float ): ...
-    
-    @staticmethod
-    def rarefy(otu_table_df: pd.DataFrame, depth_method: Union[str, int] = 'min') -> pd.DataFrame:
-        '''Rarefy OTU table to the depth.
-        Args:
-            otu_table_df: OTU table DataFrame, OTU_ID as index, sample IDs as columns.
-        Returns:
-            rarefied_otu_table_df: rarefied OTU table DataFrame.
-        '''
-
-        if isinstance(depth_method, int):
-            depth = depth_method
-
-        elif isinstance(depth_method, str) and depth_method == 'min':
-            depth = int(otu_table_df.sum(axis=0).min())
-
-        elif isinstance(depth_method, str) and depth_method.endswith('%'):
-            perc = float(depth_method.strip('%')) / 100.0
-            depth = int(otu_table_df.sum(axis=0).min() * perc)
-
 
 class Metadata:
     '''Operator of metadata table.'''

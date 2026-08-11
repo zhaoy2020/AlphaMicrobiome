@@ -8,13 +8,16 @@ from typing import Literal
 import pandas as pd 
 
 
-def run_command(command: str, retries: int = 3) -> None:
+def run_command(command: str, retries: int = 3, show: bool = True) -> None:
     '''Run command in shell and check for errors.
     Args:
         command: Command to run in shell.
+        retries: Number of times to retry the command.
+        show: Whether to display the command output.
     Returns:
         None
     '''
+
     if isinstance(command, list):
         shell = False
     elif isinstance(command, str):
@@ -22,7 +25,7 @@ def run_command(command: str, retries: int = 3) -> None:
 
     for i in range(retries):
         try:
-            result = run(command, shell=shell, check=True)
+            result = run(command, shell=shell, check=True, capture_output=not show, text=True)
             return 0
         
         except Exception as e:
@@ -47,11 +50,11 @@ class SRATools:
 
     def __init__(
         self,
-        aspera_path: str | None = '~/.aspera/connect/bin/ascp',
+        aspera_path: str | None = None,
         aspera_key_path: str | None = None,
     ):
 
-        self.aspera_path = aspera_path if aspera_path is not None else 'ascp'
+        self.aspera_path = aspera_path if aspera_path is not None else '~/.aspera/connect/bin/ascp'
         self.aspera_key_path = aspera_key_path if aspera_key_path is not None else '~/.aspera/connect/etc/asperaweb_id_dsa.openssh'
 
     def query(self, project_id: str, output_meta_file: str): ...
@@ -72,7 +75,7 @@ class SRATools:
 
         return meta_df['Run'].tolist(), meta_df['LibraryLayout'].tolist()
 
-    def aspera(self, srr_id: str, suffix: str, output_dir: str):
+    def aspera(self, srr_id: str, suffix: str, output_dir: str, method: str = 'ascp'):
         '''Download SRA data using Aspera connect according to SRR ID.
         Args:
             srr_id: SRA Run ID to download.
@@ -96,7 +99,7 @@ class SRATools:
             elif len(srr) == 12:  # SRR + 9位
                 return f"/vol1/fastq/{srr[:6]}/{srr[-6:-3]}/{srr[-3:]}/{srr}/{srr}{suffix}.fastq.gz"
 
-        cmd = [
+        ascp_cmd = [
             f'{self.aspera_path}',
             # ' --help',
             f' -QT -k 1 -l 300m -P 33001',
@@ -105,7 +108,18 @@ class SRATools:
             f' {output_dir}',
         ]
 
-        run_command(" ".join(cmd))
+        wget_cmd = [
+            'wget',
+            f' -O {Path(output_dir) / f"{srr_id}{suffix}.fastq.gz"}',
+            f' ftp://ftp.sra.ebi.ac.uk/{ena_path(srr_id)}'
+        ]
+
+        if method == 'ascp':
+            run_command(" ".join(ascp_cmd))
+        elif method == 'wget':
+            run_command(" ".join(wget_cmd))
+        else:
+            raise ValueError('Invalid method.')
 
         return None
 
@@ -114,16 +128,16 @@ class SRATools:
         srr_ids: list,
         sequence_types: list[Literal['single', 'paired']],
         output_dir: str = '.',
-        method: str = 'asp',
+        method: str = 'ascp',
         backend: Literal['loky', 'multiprocessing', 'threading'] = 'threading',
-        pre_dispath: int = 5,
+        pre_dispatch: int = 5,
         verbose: int = 10,
     ):
         '''Download SRA data according to SRR IDs using specified method.
         Args:
             srr_ids: List of SRA IDs to download.
             sequence_types: List of sequence types to download. Options are 'paired' and 'single'.
-            method: Method to use for downloading. Options are 'asp' and 'fasp'.
+            method: Method to use for downloading. Options are 'ascp' and 'wget'.
             output_dir: Directory to save downloaded files.
         Returns:
             None
@@ -133,38 +147,31 @@ class SRATools:
         >>> sequence_types = ['paired', 'single']
         >>> output_dir = './data'
         >>> sratoools = SRATools()
-        >>> sratoools.download(srr_ids, sequence_types, output_dir, method='asp', backend='threading', pre_dispath=5, verbose=10)
+        >>> sratoools.download(srr_ids, sequence_types, output_dir, method='ascp', backend='threading', pre_dispath=5, verbose=10)
         '''
 
         from joblib import Parallel, delayed
 
-        if method == 'asp':
-            # Generate tasks for parallel execution
-            tasks: list = []
+        # Generate tasks for parallel execution
+        tasks: list = []
 
-            for srr_id, sequence_type in zip(srr_ids, sequence_types):
-                if 'paired' in sequence_type.lower():
-                    paired_left_tasks = [delayed(self.aspera)(
-                        srr_id=srr_id, suffix='_1', output_dir=output_dir)]
-                    tasks.extend(paired_left_tasks)
-                    paired_right_tasks = [delayed(self.aspera)(
-                        srr_id=srr_id, suffix='_2', output_dir=output_dir)]
-                    tasks.extend(paired_right_tasks)
+        for srr_id, sequence_type in zip(srr_ids, sequence_types):
+            if 'paired' in sequence_type.lower():
+                paired_left_tasks = [delayed(self.aspera)(srr_id=srr_id, suffix='_1', output_dir=output_dir, method=method)]
+                tasks.extend(paired_left_tasks)
+                paired_right_tasks = [delayed(self.aspera)(srr_id=srr_id, suffix='_2', output_dir=output_dir, method=method)]
+                tasks.extend(paired_right_tasks)
 
-                elif 'single' in sequence_type.lower():
-                    single_tasks = [delayed(self.aspera)(
-                        srr_id=srr_id, suffix='', output_dir=output_dir)]
-                    tasks.extend(single_tasks)
+            elif 'single' in sequence_type.lower():
+                single_tasks = [delayed(self.aspera)(srr_id=srr_id, suffix='', output_dir=output_dir, method=method)]
+                tasks.extend(single_tasks)
 
-                else:
-                    logger.warning(
-                        f'Unknown sequence type: {sequence_type} for SRR ID: {srr_id}. Skipping.')
+            else:
+                logger.warning(f'Unknown sequence type: {sequence_type} for SRR ID: {srr_id}. Skipping.')
 
-            # Run tasks in parallel
-            parallel = Parallel(n_jobs=-1, backend=backend, pre_dispatch=pre_dispath, verbose=verbose)
-            parallel(tasks)
+        # Run tasks in parallel
+        parallel = Parallel(n_jobs=-1, backend=backend, pre_dispatch=pre_dispatch, verbose=verbose)
+        parallel(tasks)
 
-        else:
-            raise ValueError('Invalid method.')
 
         return None

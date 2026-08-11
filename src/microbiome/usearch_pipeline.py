@@ -135,21 +135,25 @@ class UsearchPipeline:
         self.run_cmd(merge_cmd)
         self.run_cmd(f'echo "Total reads in all samples:" && grep @ {all_samples_dir.joinpath("all_samples.fastq")} | wc -l', show=True)
 
-    def filter_low_quality_reads(self):
-        '''Filter low-quality reads using usearch.
+    def filter_low_quality_reads(self, fastq_maxee: float = 1.0):
+        '''Filter low-quality merged reads (according to the maximum expected errors).
+        Args:
+            fastq_maxee: float, the maximum expected errors allowed for a read to pass the filter, default is 1.0.
+        Return:
+            None
         Examples:
         >>> usearch11 -fastq_filter all_samples.fastq -fastaout all_samples_filtered.fastq -fastq_maxee 1.0 -relabel Filt -threads 8
         '''
 
-        logger.info('Filtering low-quality reads step starting...')
+        logger.info(f'Filtering low-quality reads step starting with maximum expected errors of {fastq_maxee} ...')
         all_samples_file: Path = self.results_dir.joinpath('003_all_samples_merged/all_samples.fastq')
         all_samples_filtered: Path = self.results_dir.joinpath('003_all_samples_merged/all_samples_filtered.fastq')
-        filter_cmd = f'{self.usearch_version} -fastq_filter {all_samples_file} -fastaout {all_samples_filtered} -fastq_maxee 1.0 -relabel Filt -threads {self.threads}'
+        filter_cmd = f'{self.usearch_version} -fastq_filter {all_samples_file} -fastaout {all_samples_filtered} -fastq_maxee {fastq_maxee} -relabel Filt -threads {self.threads}'
         self.run_cmd(filter_cmd)        
         self.run_cmd(f'echo "Total reads after filtering:" && grep ">" {all_samples_filtered} | wc -l', show=True)
 
     def dereplication(self):
-        '''Dereplicate reads using usearch.
+        '''Dereplicate merged and filtered reads.
         Examples:
         >>> usearch11 -fastx_uniques all_samples_filtered.fastq -fastaout all_samples_filtered_dereplicated.fasta -relabel Uniq -sizeout -threads 8
         '''
@@ -163,6 +167,10 @@ class UsearchPipeline:
 
     def remove_singletons(self, minsize: int = 2):
         '''Remove singletons from the dereplicated fasta file.
+        Args:
+            minsize: int=2, the minimum size of reads to keep, default is 2, which means removing singletons.
+        Return:
+            None
         Examples:
         >>> usearch11 -sortbysize all_samples_filtered_dereplicated.fasta -fastaout all_samples_filtered_dereplicated_no_singleton.fasta -minsize 2
         '''
@@ -175,7 +183,11 @@ class UsearchPipeline:
         self.run_cmd(f'echo "Total unique reads after removing singletons:" && grep ">" {no_singleton_fasta} | wc -l', show=True)
 
     def preorder(self, minsize: int = 8):
-        '''Preorder sequences by abundance.
+        '''Preorder sequences by abundance, and remove low-abundance reads accroding to the abundance.
+        Args:
+            minsize: int=8, the minimum size of reads to keep, default is 8, which means removing low-abundance reads.
+        Return:
+            None
         Examples:
         >>> usearch11 -sortbysize all_samples_filtered_dereplicated_no_singleton.fasta -fastaout all_samples_filtered_dereplicated_no_singleton_preorder.fasta -minsize 8
         '''
@@ -189,6 +201,10 @@ class UsearchPipeline:
 
     def cluster_to_outs(self, method: Literal['usearch', 'vsearch'] = 'usearch'):
         '''Cluster sequences into OTUs.
+        Args:
+            method: str, the method to use for clustering, default is 'usearch', can also be 'vsearch'.
+        Return:
+            None
         Examples:
         >>> usearch11 -cluster_otus all_samples_filtered_dereplicated_no_singleton_preorder.fasta -otus all_samples_filtered_dereplicated_no_singleton_preorder_otus.fasta -relabel Otu -threads 8 > all_samples_filtered_dereplicated_no_singleton_preorder_otus.log 2>&1
         '''
@@ -199,13 +215,19 @@ class UsearchPipeline:
         otu_fasta_log: Path = self.results_dir.joinpath('003_all_samples_merged/all_samples_filtered_dereplicated_no_singleton_preorder_otus.log')
         if method == 'usearch':
             cluster_cmd = f'{self.usearch_version} -cluster_otus {preorder_fasta} -otus {otu_fasta} -relabel Otu -threads {self.threads} > {otu_fasta_log}.{method} 2>&1'
-        else:
+        elif method == 'vsearch':
             cluster_cmd = f'vsearch --cluster_size {preorder_fasta} --centroids {otu_fasta} --log {otu_fasta_log}.{method}'
+        else:
+            raise ValueError(f"Invalid method: {method}. Must be 'usearch' or 'vsearch'.")
         self.run_cmd(cluster_cmd)
         self.run_cmd(f'echo "Total OTUs after clustering:" && grep ">" {otu_fasta} | wc -l', show=True)
 
     def denoise_to_zotus(self, method: Literal['usearch', 'vsearch'] = 'usearch'):
         '''Denoise sequences to zOTUs.
+        Args:
+            method: str, the method to use for denoising, default is 'usearch', can also be 'vsearch'.
+        Return:
+            None
         Examples:
         >>> usearch11 -unoise3 all_samples_filtered_dereplicated_no_singleton_preorder.fasta -zotus all_samples_filtered_dereplicated_no_singleton_preorder_zotus.fasta -threads 8 > all_samples_filtered_dereplicated_no_singleton_preorder_zotus.log 2>&1
         '''
@@ -216,8 +238,10 @@ class UsearchPipeline:
         denoised_fasta_log: Path = self.results_dir.joinpath('003_all_samples_merged/all_samples_filtered_dereplicated_no_singleton_preorder_zotus.log')
         if method == 'usearch':
             denoise_cmd = f'{self.usearch_version} -unoise3 {no_singleton_fasta} -zotus {denoised_fasta} -threads {self.threads} > {denoised_fasta_log}.{method} 2>&1'
-        else:
+        elif method == 'vsearch':
             denoise_cmd = f'vsearch --cluster_size {no_singleton_fasta} --centroids {denoised_fasta} --log {denoised_fasta_log}.{method}'
+        else:
+            raise ValueError(f"Invalid method: {method}. Must be 'usearch' or 'vsearch'.")
         self.run_cmd(denoise_cmd)
         self.run_cmd(f'echo "Total ZOTUs after denoising:" && grep ">" {denoised_fasta} | wc -l', show=True)
 
@@ -255,6 +279,10 @@ class UsearchPipeline:
 
     def classification(self, db_file: str | None = None):
         '''Classify OTUs or zOTUs using usearch.
+        Args:
+            db_file: str, the path to the database file for taxonomic classification, default is None which means using the default database file.
+        Return:
+            None
         Examples:
         >>> usearch11 -sintax all_samples_filtered_dereplicated_no_singleton_preorder_otus.fasta -db . ./dbs/rdp_16s_v18_usearch.udb -tabbedout all_samples_filtered_dereplicated_no_singleton_preorder_otus_sintax.txt -strand both 
         '''

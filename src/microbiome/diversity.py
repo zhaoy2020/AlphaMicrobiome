@@ -2,6 +2,8 @@
 from typing import List, Tuple, Dict, Optional, Union, Any
 
 from loguru import logger
+from joblib import Parallel, delayed
+from tqdm import tqdm
 
 import numpy as np
 import pandas as pd
@@ -88,6 +90,51 @@ class AutoRarefaction:
                 rarefied_tables[alpha_metric_name].append(avg_alpha_metric)
 
         return pd.DataFrame(rarefied_tables)
+
+    def _rarefy_all_with_joblib(self, depths: List[int], repeats: int = 30, alpha_metric_name: Optional[str] = None) -> pd.DataFrame:
+        '''Rarefy the OTU table to multiple depths.
+        Args:
+            depths : List[int], List of depths to rarefy to.
+            repeats : int, Number of repeated subsamplings per depth.
+            alpha_metric_name : str, Name of the alpha diversity metric to compute.
+        Returns:
+            Dict[int, pd.DataFrame], Mapping from depth to rarefied OTU table.
+        Examples:
+        >>> all_rarefaction_table_df = ar.rarefaction_curves(max_depth=100000, steps=10, repeats=30, alpha_metric_name='chao1')
+        >>> otu_rarefied_table: pd.DataFrame = ar.rarefy(depths=[3947], repeats=1, alpha_metric_name='chao1', is_final_rarefaction=True)
+        '''
+
+        def _rarefy_sample_depth(sample_id, counts, depth, repeats, alpha_metric_name):
+            """辅助函数，用于并行"""
+            alpha_values = []
+            for _ in range(repeats):
+                subsampled = self._subsample_counts(counts, depth)
+                if subsampled is not None:
+                    alpha = alpha_diversity(metric=alpha_metric_name, counts=subsampled, ids=[sample_id])
+                    alpha_values.append(alpha[sample_id])
+            avg_alpha = np.mean(alpha_values) if alpha_values else np.nan
+
+            return sample_id, depth, avg_alpha
+
+        # 预先提取样本数据，避免在并行中反复访问 self.otu_table
+        sample_items = [(sample, self.otu_table[sample].values) for sample in self.otu_table.columns]
+
+        # 构建所有任务
+        tasks = [
+            delayed(_rarefy_sample_depth)(sample, counts, depth, repeats, alpha_metric_name)
+            for sample, counts in sample_items
+            for depth in depths
+        ]
+
+        # 执行并行计算
+        results = Parallel(n_jobs=-1, verbose=10, pre_dispatch='all')(tasks)
+        # results = Parallel(n_jobs=-1, verbose=0, pre_dispatch='all')(tqdm(tasks))
+        # results = Parallel(n_jobs=-1, verbose=0, pre_dispatch=2*64)(tqdm(tasks))
+
+        # 转换为 DataFrame
+        df = pd.DataFrame(results, columns=['SampleID', 'Depth', alpha_metric_name])
+
+        return df
     
     def rarefaction_curves(self, max_depth: Optional[int] = None, steps: int = 20, repeats: int = 30, alpha_metric_name: str = "Shannon"):
         '''Plot rarefaction curves for each sample.
@@ -157,10 +204,10 @@ class AutoRarefaction:
             ax=ax,
             legend=show_legend,
         )
+        ax.set_title(f'Rarefaction Curves by {group_name}', fontsize=8)
         # plt.xscale('log')
         ax.set_xlabel('Sampling Depth')
         ax.set_ylabel(f'{alpha_metric_name.capitalize()} Diversity')
-        ax.set_title(f'Rarefaction Curves by {group_name}', fontsize='large')
         if show_legend:
             ax.legend()
             # axs[0].legend(bbox_to_anchor=(1.05, 1), loc='upper left')
