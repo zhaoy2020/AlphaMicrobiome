@@ -20,4 +20,3 @@ Repository = "https://github.com/zhaoy2020/AlphaMicrobiome"
 
 [tool.setuptools.packages.find]
 where = ["src"]                                             # 指定要搜索包的目录，通常是 src 目录，这样可以将源代码与其他项目文件分开。
-
