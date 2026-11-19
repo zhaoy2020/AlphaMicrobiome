@@ -9,7 +9,7 @@
 
 # AlphaMicrobiome
 
-AlphaMicrobiome is a Python‑based toolkit for microbiome data analysis, designed to deliver efficient analytical solutions. It integrates a variety of microbiome analysis algorithms and supports end‑to‑end analysis workflows, ranging from raw data preprocessing to advanced statistical analysis.
+AlphaMicrobiome is an integrated Python and R toolkit for microbiome data analysis, designed to provide efficient and reproducible analytical solutions. It supports workflows from microbiome data preprocessing and diversity analysis to statistical testing, ecological analysis, machine learning, and visualization.
 
 ---
 
@@ -21,10 +21,14 @@ AlphaMicrobiome is a Python‑based toolkit for microbiome data analysis, design
 - **Taxonomic composition** – Phylum‑to‑genus level summarization with interactive bar plots.
 - **Statistical comparisons** – PERMANOVA, ANOSIM, DESeq2‑like differential abundance, LEfSe wrapper.
 - **Visualization** – PCA, PCoA, NMDS, heatmaps, rarefaction curves.
-- **Python‑first design** – Seamless integration with `pandas`, `scikit‑bio`, `numpy`, and `matplotlib`.
+- **ython and R integration** – Combined use of Python and R for microbiome and ecological analyses.
 
 ---
 
+# Study-specific code
+The repository includes the Python and R scripts used for the analyses and figure generation in our potato soil microbiome study. These scripts cover major analyses including diversity, community composition, environmental associations, community assembly, microbial networks, functional prediction, and figure generation.
+
+---
 # Installation
 
 Download and install from GitHub:
@@ -40,7 +44,7 @@ pip install AlphaMicrobiome
 ```
 
 # Tutorial
-Detailed tutorials can be found in the notebooks.
+Detailed tutorials and examples can be found in the notebooks and analysis scripts.
 
 # Contributing
 We welcome contributions! Please follow these steps:
